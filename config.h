@@ -59,6 +59,13 @@ int allowwindowops = 0;
 static double minlatency = 8;
 static double maxlatency = 33;
 
+/* visual-bell timeout in ms (0 to disable visual-bell) */
+static int vbelltimeout = 150;
+/* choose predefined visual-bell cells to inverse, or define your own logic */
+#define VBCELL x == 0 || x == right || y == 0 || y == bottom /* border */
+// #define VBCELL 1  /* all cells - whole screen */
+// #define VBCELL y==bottom && x>right-2  /* bottom-right */
+
 /*
  * blinking timeout (set to 0 to disable blinking) for the terminal blinking
  * attribute.

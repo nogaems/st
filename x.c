@@ -250,7 +250,6 @@ static char *opt_title = NULL;
 
 static int oldbutton = 3; /* button event on startup: 3 = release */
 static int cursorblinks = 0;
-static int bellon = 0; /* visual bell status */
 
 void clipcopy(const Arg *dummy) {
   Atom clipboard;
@@ -1474,6 +1473,23 @@ void xsettitle(char *p) {
   XFree(prop.value);
 }
 
+static int vbellset = 0; /* 1 during visual bell, 0 otherwise */
+static struct timespec lastvbell = {0};
+
+static int isvbellcell(int x, int y) {
+  int right = win.tw / win.cw - 1, bottom = win.th / win.ch - 1;
+  return VBCELL; /* logic condition defined at config.h */
+}
+
+static void vbellbegin() {
+  clock_gettime(CLOCK_MONOTONIC, &lastvbell);
+  if (vbellset)
+    return;
+  vbellset = 1;
+  redraw();
+  XFlush(xw.dpy);
+}
+
 int xstartdraw(void) { return IS_SET(MODE_VISIBLE); }
 
 void xdrawline(Line line, int x1, int y1, int x2) {
@@ -1488,6 +1504,8 @@ void xdrawline(Line line, int x1, int y1, int x2) {
     if (new.mode == ATTR_WDUMMY)
       continue;
     if (selected(x, y1))
+      new.mode ^= ATTR_REVERSE;
+    if (vbellset && isvbellcell(x, y1))
       new.mode ^= ATTR_REVERSE;
     if (i > 0 && ATTRCMP(base, new)) {
       xdrawglyphfontspecs(specs, base, i, ox, y1);
@@ -1565,8 +1583,8 @@ void xbell(void) {
     xseturgency(1);
   if (bellvolume)
     XkbBell(xw.dpy, xw.win, bellvolume, (Atom)NULL);
-  if (!bellon) /* turn visual bell on */
-    bellon = 1;
+  if (vbelltimeout)
+    vbellbegin();
 }
 
 void focus(XEvent *ev) {
@@ -1801,13 +1819,17 @@ void run(void) {
       }
     }
 
-    if (bellon) {
-      bellon++;
-      bellon %= 3;
-      MODBIT(win.mode, !IS_SET(MODE_REVERSE), MODE_REVERSE);
-      redraw();
-    } else
-      draw();
+    if (vbellset) {
+      double remain = vbelltimeout - TIMEDIFF(now, lastvbell);
+      if (remain <= 0) {
+        vbellset = 0;
+        redraw();
+      } else if (timeout < 0 || remain < timeout) {
+        timeout = remain;
+      }
+    }
+
+    draw();
     XFlush(xw.dpy);
     drawing = 0;
   }
